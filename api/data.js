@@ -5,6 +5,14 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
+function parseRedis(val) {
+  if (!val) return null;
+  if (typeof val === 'string') {
+    try { return JSON.parse(val); } catch { return val; }
+  }
+  return val; // already parsed by Upstash
+}
+
 export default async function handler(req, res) {
   try {
     const [docsRaw, lastSweep, totalFound] = await Promise.all([
@@ -13,9 +21,8 @@ export default async function handler(req, res) {
       redis.get('dea:total_found'),
     ]);
 
-    const docs = docsRaw ? JSON.parse(docsRaw) : [];
+    const docs = parseRedis(docsRaw) || [];
 
-    // Category counts
     const categories = {};
     for (const doc of docs) {
       categories[doc.category] = (categories[doc.category] || 0) + 1;

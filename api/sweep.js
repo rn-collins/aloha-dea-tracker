@@ -90,11 +90,11 @@ export default async function handler(req, res) {
       }));
 
     const previousRaw = await redis.get('dea:documents');
-    const previous = previousRaw ? JSON.parse(previousRaw) : [];
+    const previous = Array.isArray(previousRaw) ? previousRaw : (previousRaw ? JSON.parse(String(previousRaw)) : []);
     const previousNums = new Set(previous.map(d => d.document_number));
     const newDocs = relevant.filter(d => !previousNums.has(d.document_number));
 
-    await redis.set('dea:documents', JSON.stringify(relevant));
+    await redis.set('dea:documents', relevant);
     await redis.set('dea:last_sweep', new Date().toISOString());
     await redis.set('dea:total_found', allDocs.length);
 

@@ -1,0 +1,11 @@
+{
+  "name": "aloha-dea-tracker",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "echo 'no build needed'"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.34.0"
+  }
+}

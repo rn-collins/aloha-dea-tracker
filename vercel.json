@@ -5,5 +5,15 @@
       "path": "/api/sweep",
       "schedule": "0 9 * * 1"
     }
+  ],
+  "routes": [
+    {
+      "src": "/",
+      "dest": "/api/dashboard"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
+    }
   ]
 }

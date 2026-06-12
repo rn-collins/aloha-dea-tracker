@@ -203,6 +203,29 @@ async function load() {
 
 load();
 </script>
+
+<script>
+function handleContact_dea() {
+  var btn = document.getElementById('contact-btn-dea');
+  var orig = btn.innerHTML;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText('collins.ra@northeastern.edu').catch(function(){});
+  }
+  window.open('mailto:collins.ra@northeastern.edu?subject=Regulatory%20Intelligence%20Layer%20%E2%80%94%20Discovery%20Call%20Request');
+  btn.innerHTML = '&#10003; Copied: collins.ra@northeastern.edu';
+  btn.style.fontFamily = 'monospace';
+  btn.style.fontSize = '11px';
+  btn.style.whiteSpace = 'nowrap';
+  btn.style.textDecoration = 'none';
+  setTimeout(function() {
+    btn.innerHTML = orig;
+    btn.style.fontFamily = '';
+    btn.style.fontSize = '';
+    btn.style.whiteSpace = '';
+    btn.style.textDecoration = 'underline';
+  }, 2500);
+}
+</script>
 </body>
 </html>`;
 

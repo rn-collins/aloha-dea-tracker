@@ -5,6 +5,16 @@ export default function handler(req, res) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DEA Scheduling Monitor — Aloha AI Consulting</title>
+<meta name="description" content="Real-time tracker of DEA Federal Register publications covering controlled substance scheduling actions, quota orders, temporary placements, and proposed rules.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://aloha-dea-tracker.vercel.app/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://aloha-dea-tracker.vercel.app/">
+<meta property="og:title" content="DEA Scheduling Monitor — Aloha AI Consulting">
+<meta property="og:description" content="Automated primary-source intelligence: DEA Federal Register publications on controlled substance scheduling, quotas, and temporary orders.">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="DEA Scheduling Monitor — Aloha AI Consulting">
+<meta name="twitter:description" content="Automated primary-source intelligence: DEA Federal Register publications on controlled substance scheduling, quotas, and temporary orders.">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Syne:wght@500;700&family=Manrope:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -12,7 +22,7 @@ export default function handler(req, res) {
   .page { max-width: 900px; margin: 0 auto; padding: 52px 48px; }
 
   /* Header */
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid #D0CEC8; }
+  .site-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid #D0CEC8; }
   .brand { font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #1B7A68; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
   .brand-dot { width: 8px; height: 8px; border-radius: 50%; background: #1B7A68; flex-shrink: 0; }
   .doc-title { font-family: 'Cormorant Garamond', serif; font-size: 28px; font-weight: 600; line-height: 1.2; }
@@ -30,7 +40,8 @@ export default function handler(req, res) {
 
   /* Category pills */
   .cat-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; }
-  .cat-pill { font-family: 'DM Mono', monospace; font-size: 10px; padding: 4px 10px; border-radius: 20px; border: .5px solid; cursor: pointer; transition: all .15s; }
+  .cat-pill { font-family: 'DM Mono', monospace; font-size: 10px; padding: 4px 10px; border-radius: 20px; border: .5px solid; cursor: pointer; transition: all .15s; background: none; }
+  .disclaimer { font-family: 'DM Mono', monospace; font-size: 10px; color: #B8B4AE; line-height: 1.6; margin-bottom: 24px; padding: 12px 16px; border: .5px solid #D0CEC8; border-radius: 6px; background: white; }
   .cat-pill.active { background: #1B7A68; color: white; border-color: #1B7A68; }
   .cat-pill.inactive { background: white; color: #7A7875; border-color: #D0CEC8; }
   .cat-pill:hover { border-color: #1B7A68; }
@@ -53,70 +64,75 @@ export default function handler(req, res) {
   .no-results { text-align: center; padding: 40px; color: #9A9890; font-size: 13px; }
 
   /* Footer */
-  .footer { border-top: .5px solid #D0CEC8; padding-top: 24px; display: flex; justify-content: space-between; align-items: flex-end; }
+  .site-footer { border-top: .5px solid #D0CEC8; padding-top: 24px; display: flex; justify-content: space-between; align-items: flex-end; }
   .footer-name { font-family: 'Cormorant Garamond', serif; font-size: 15px; font-weight: 600; }
   .footer-creds { font-size: 10px; color: #9A9890; margin-top: 3px; font-family: 'DM Mono', monospace; line-height: 1.6; }
   .footer-contact { text-align: right; font-size: 10px; font-family: 'DM Mono', monospace; line-height: 1.9; }
   .footer-contact a { color: #1B7A68; text-decoration: none; }
   .loading { text-align: center; padding: 60px; color: #9A9890; font-family: 'DM Mono', monospace; font-size: 12px; }
 
-  @media (max-width: 640px) { .page { padding: 28px 16px; } .stats-row { grid-template-columns: 1fr 1fr; } .header { flex-direction: column; gap: 16px; } .footer { flex-direction: column; gap: 16px; } .footer-contact { text-align: left; } }
+  @media (max-width: 640px) { .page { padding: 28px 16px; } .stats-row { grid-template-columns: 1fr 1fr; } .site-header { flex-direction: column; gap: 16px; } .site-footer { flex-direction: column; gap: 16px; } .footer-contact { text-align: left; } }
 </style>
 </head>
 <body>
 <div class="page">
-  <div class="header">
+  <header class="site-header">
     <div>
-      <div class="brand"><span class="brand-dot"></span>Aloha AI Consulting</div>
-      <div class="doc-title">DEA Scheduling Monitor</div>
-      <div class="doc-sub">Automated system tracking DEA Federal Register publications for controlled substance scheduling actions</div>
+      <div class="brand" aria-label="Aloha AI Consulting"><span class="brand-dot" aria-hidden="true"></span>Aloha AI Consulting</div>
+      <h1 class="doc-title">DEA Scheduling Monitor</h1>
+      <p class="doc-sub">Automated system tracking DEA Federal Register publications for controlled substance scheduling actions</p>
     </div>
-    <div class="status-pill"><span class="pulse"></span><span id="last-updated">Loading...</span></div>
-  </div>
+    <div class="status-pill" role="status" aria-live="polite"><span class="pulse" aria-hidden="true"></span><span id="last-updated">Loading...</span></div>
+  </header>
 
-  <div class="stats-row">
-    <div class="stat-card">
-      <div class="stat-label">Scheduling Docs</div>
-      <div class="stat-value" id="stat-relevant">—</div>
-      <div class="stat-sub">last 180 days</div>
+  <main>
+    <div class="stats-row" role="region" aria-label="Summary statistics">
+      <div class="stat-card">
+        <div class="stat-label">Scheduling Docs</div>
+        <div class="stat-value" id="stat-relevant">—</div>
+        <div class="stat-sub">last 180 days</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Final Rules</div>
+        <div class="stat-value" id="stat-rules">—</div>
+        <div class="stat-sub">scheduling actions</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Quota Actions</div>
+        <div class="stat-value" id="stat-apq">—</div>
+        <div class="stat-sub">aggregate production quota</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Temp Orders</div>
+        <div class="stat-value" id="stat-temp">—</div>
+        <div class="stat-sub">emergency placements</div>
+      </div>
     </div>
-    <div class="stat-card">
-      <div class="stat-label">Final Rules</div>
-      <div class="stat-value" id="stat-rules">—</div>
-      <div class="stat-sub">scheduling actions</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Quota Actions</div>
-      <div class="stat-value" id="stat-apq">—</div>
-      <div class="stat-sub">APQ / production</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Temp Orders</div>
-      <div class="stat-value" id="stat-temp">—</div>
-      <div class="stat-sub">emergency placements</div>
-    </div>
-  </div>
 
-  <div class="cat-row" id="cat-row"></div>
+    <nav class="cat-row" id="cat-row" aria-label="Filter by document type"></nav>
 
-  <div class="section-label">Recent Documents</div>
-  <div class="doc-list" id="doc-list"><div class="loading">Fetching DEA Federal Register data...</div></div>
+    <div class="section-label" id="doc-section-label">Recent Documents</div>
+    <div class="doc-list" id="doc-list" role="list" aria-live="polite" aria-label="Documents"><div class="loading">Fetching DEA Federal Register data...</div></div>
 
-  <div class="footer">
+    <div class="disclaimer" role="note">
+      Source data is retrieved directly from the Federal Register API (federalregister.gov). This tool provides automated document discovery for informational purposes only — it is not legal advice and does not constitute a comprehensive legal or regulatory review. Consult a licensed attorney for guidance on specific regulatory matters.
+    </div>
+  </main>
+
+  <footer class="site-footer">
     <div>
       <div class="footer-name">RN Collins</div>
       <div class="footer-creds">
-        Neuroscientist · MS Anatomy & Neurobiology, BU School of Medicine<br>
-        JD Candidate · Northeastern University School of Law<br>
-        DEA Scheduling Monitor · automated primary-source intelligence, not a prototype
+        Neuroscientist &middot; MS Anatomy &amp; Neurobiology, BU School of Medicine<br>
+        JD Candidate &middot; Northeastern University School of Law
       </div>
     </div>
     <div class="footer-contact">
-      <a href="https://mail.google.com/mail/?view=cm&fs=1&to=collins.ra@northeastern.edu&su=Regulatory%20Intelligence%20Layer%20—%20Discovery%20Call%20Request" target="_blank">collins.ra@northeastern.edu</a><br>
+      <a href="mailto:collins.ra@northeastern.edu?subject=Regulatory%20Intelligence%20Layer%20%E2%80%94%20Discovery%20Call%20Request">collins.ra@northeastern.edu</a><br>
       <a href="tel:+18606814438">860-681-4438</a><br>
-      <a href="https://rncollins.com/aloha-ai-consulting" target="_blank">rncollins.com/aloha-ai-consulting</a>
+      <a href="https://rncollins.com/aloha-ai-consulting" target="_blank" rel="noopener">rncollins.com/aloha-ai-consulting</a>
     </div>
-  </div>
+  </footer>
 </div>
 
 <script>
@@ -138,17 +154,20 @@ function formatDate(d) {
 
 function renderDocs(docs) {
   const list = document.getElementById('doc-list');
+  const label = document.getElementById('doc-section-label');
   if (!docs.length) {
     list.innerHTML = '<div class="no-results">No documents match this filter.</div>';
+    label.textContent = 'Recent Documents';
     return;
   }
+  label.textContent = activeFilter === 'All' ? 'Recent Documents' : activeFilter + ' (' + docs.length + ')';
   list.innerHTML = docs.map(doc => \`
-    <a class="doc-card" href="\${doc.url}" target="_blank" rel="noopener">
-      <div class="doc-type-badge \${badgeClass(doc.category)}">\${doc.category}</div>
+    <a class="doc-card" href="\${doc.url}" target="_blank" rel="noopener" role="listitem" aria-label="\${doc.category}: \${doc.title}">
+      <div class="doc-type-badge \${badgeClass(doc.category)}" aria-hidden="true">\${doc.category}</div>
       <div>
         <div class="doc-title-text">\${doc.title}</div>
-        <div class="doc-meta">\${doc.citation} &nbsp;·&nbsp; \${formatDate(doc.publication_date)}</div>
-        \${doc.abstract ? \`<div class="doc-abstract">\${doc.abstract}\${doc.abstract.length >= 300 ? '…' : ''}</div>\` : ''}
+        <div class="doc-meta">\${doc.citation} &nbsp;&middot;&nbsp; \${formatDate(doc.publication_date)}</div>
+        \${doc.abstract ? \`<div class="doc-abstract">\${doc.abstract}\${doc.abstract.length >= 300 ? '&hellip;' : ''}</div>\` : ''}
       </div>
     </a>
   \`).join('');
@@ -157,8 +176,10 @@ function renderDocs(docs) {
 function setFilter(cat) {
   activeFilter = cat;
   document.querySelectorAll('.cat-pill').forEach(p => {
-    p.classList.toggle('active', p.dataset.cat === cat);
-    p.classList.toggle('inactive', p.dataset.cat !== cat);
+    const isActive = p.dataset.cat === cat;
+    p.classList.toggle('active', isActive);
+    p.classList.toggle('inactive', !isActive);
+    p.setAttribute('aria-pressed', isActive ? 'true' : 'false');
   });
   const filtered = cat === 'All' ? allDocs : allDocs.filter(d => d.category === cat);
   renderDocs(filtered);
@@ -186,45 +207,27 @@ async function load() {
       document.getElementById('last-updated').textContent = 'Awaiting first sweep';
     }
 
-    // Category filters
-    const cats = ['All', ...Object.keys(data.categories || {}).sort()];
+    // Category filters — high-signal types first
+    const PRIORITY = ['All', 'Final Rule', 'Temporary Order', 'APQ / Quota', 'Proposed Rule', 'Registration', 'Notice'];
+    const available = Object.keys(data.categories || {});
+    const ordered = PRIORITY.filter(c => c === 'All' || available.includes(c));
+    const remainder = available.filter(c => !ordered.includes(c)).sort();
+    const cats = [...ordered, ...remainder];
     const catRow = document.getElementById('cat-row');
     catRow.innerHTML = cats.map(c => {
       const count = c === 'All' ? allDocs.length : (data.categories?.[c] || 0);
-      return \`<button class="cat-pill \${c === 'All' ? 'active' : 'inactive'}" data-cat="\${c}" onclick="setFilter('\${c}')">\${c} (\${count})</button>\`;
+      const isActive = c === 'All';
+      return \`<button type="button" class="cat-pill \${isActive ? 'active' : 'inactive'}" data-cat="\${c}" aria-pressed="\${isActive}" onclick="setFilter('\${c}')">\${c} (\${count})</button>\`;
     }).join('');
 
     renderDocs(allDocs);
   } catch (err) {
     document.getElementById('doc-list').innerHTML = \`<div class="no-results">Error loading data: \${err.message}<br><br>If this is a new deployment, run the sweep first: <code>/api/sweep</code></div>\`;
-    document.getElementById('last-updated').textContent = 'Not yet swept';
+    document.getElementById('last-updated').textContent = 'Data unavailable';
   }
 }
 
 load();
-</script>
-
-<script>
-function handleContact_dea() {
-  var btn = document.getElementById('contact-btn-dea');
-  var orig = btn.innerHTML;
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText('collins.ra@northeastern.edu').catch(function(){});
-  }
-  window.open('mailto:collins.ra@northeastern.edu?subject=Regulatory%20Intelligence%20Layer%20%E2%80%94%20Discovery%20Call%20Request');
-  btn.innerHTML = '&#10003; Copied: collins.ra@northeastern.edu';
-  btn.style.fontFamily = 'monospace';
-  btn.style.fontSize = '11px';
-  btn.style.whiteSpace = 'nowrap';
-  btn.style.textDecoration = 'none';
-  setTimeout(function() {
-    btn.innerHTML = orig;
-    btn.style.fontFamily = '';
-    btn.style.fontSize = '';
-    btn.style.whiteSpace = '';
-    btn.style.textDecoration = 'underline';
-  }, 2500);
-}
 </script>
 </body>
 </html>`;

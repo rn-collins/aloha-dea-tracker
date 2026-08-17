@@ -88,7 +88,7 @@ export default function handler(req, res) {
   <main>
     <div class="stats-row" role="region" aria-label="Summary statistics">
       <div class="stat-card">
-        <div class="stat-label">Scheduling Docs</div>
+        <div class="stat-label">High-signal Actions</div>
         <div class="stat-value" id="stat-relevant">—</div>
         <div class="stat-sub">last 180 days</div>
       </div>
@@ -98,14 +98,14 @@ export default function handler(req, res) {
         <div class="stat-sub">scheduling actions</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Quota Actions</div>
-        <div class="stat-value" id="stat-apq">—</div>
-        <div class="stat-sub">aggregate production quota</div>
+        <div class="stat-label">Proposed Actions</div>
+        <div class="stat-value" id="stat-proposed">—</div>
+        <div class="stat-sub">open for public input</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Temp Orders</div>
+        <div class="stat-label">Quota + Temp</div>
         <div class="stat-value" id="stat-temp">—</div>
-        <div class="stat-sub">emergency placements</div>
+        <div class="stat-sub">operational actions</div>
       </div>
     </div>
 
@@ -115,7 +115,7 @@ export default function handler(req, res) {
     <div class="doc-list" id="doc-list" role="list" aria-live="polite" aria-label="Documents"><div class="loading">Fetching DEA Federal Register data...</div></div>
 
     <div class="disclaimer" role="note">
-      Source data is retrieved directly from the Federal Register API (federalregister.gov). This tool provides automated document discovery for informational purposes only — it is not legal advice and does not constitute a comprehensive legal or regulatory review. Consult a licensed attorney for guidance on specific regulatory matters.
+      The default High-signal view prioritizes final rules, proposed scheduling rules, temporary orders, and quota actions. Registrations and general notices remain available as reference categories. Counts cover the same 180-day DEA document set and reconcile to All. Source data is retrieved directly from the Federal Register API (federalregister.gov). This tool provides automated document discovery for informational purposes only — it is not legal advice and does not constitute a comprehensive legal or regulatory review. Consult a licensed attorney for guidance on specific regulatory matters.
     </div>
   </main>
 
@@ -137,7 +137,7 @@ export default function handler(req, res) {
 
 <script>
 let allDocs = [];
-let activeFilter = 'All';
+let activeFilter = 'High-signal';
 
 function badgeClass(cat) {
   if (cat === 'Final Rule') return 'badge-Rule';
@@ -145,6 +145,7 @@ function badgeClass(cat) {
   if (cat === 'APQ / Quota') return 'badge-APQ';
   if (cat === 'Temporary Order') return 'badge-Temp';
   if (cat === 'Registration') return 'badge-Registration';
+  if (cat === 'General Notice') return 'badge-Notice';
   return 'badge-Notice';
 }
 
@@ -160,7 +161,7 @@ function renderDocs(docs) {
     label.textContent = 'Recent Documents';
     return;
   }
-  label.textContent = activeFilter === 'All' ? 'Recent Documents' : activeFilter + ' (' + docs.length + ')';
+  label.textContent = activeFilter === 'All' ? 'All DEA Documents (' + docs.length + ')' : activeFilter + ' (' + docs.length + ')';
   list.innerHTML = docs.map(doc => \`
     <a class="doc-card" href="\${doc.url}" target="_blank" rel="noopener" role="listitem" aria-label="\${doc.category}: \${doc.title}">
       <div class="doc-type-badge \${badgeClass(doc.category)}" aria-hidden="true">\${doc.category}</div>
@@ -181,7 +182,7 @@ function setFilter(cat) {
     p.classList.toggle('inactive', !isActive);
     p.setAttribute('aria-pressed', isActive ? 'true' : 'false');
   });
-  const filtered = cat === 'All' ? allDocs : allDocs.filter(d => d.category === cat);
+  const filtered = cat === 'All' ? allDocs : cat === 'High-signal' ? allDocs.filter(d => d.signal_tier === 'high') : allDocs.filter(d => d.category === cat);
   renderDocs(filtered);
 }
 
@@ -194,10 +195,10 @@ async function load() {
     allDocs = data.documents || [];
 
     // Stats
-    document.getElementById('stat-relevant').textContent = data.scheduling_relevant;
+    document.getElementById('stat-relevant').textContent = data.high_signal_count;
     document.getElementById('stat-rules').textContent = (data.categories?.['Final Rule'] || 0);
-    document.getElementById('stat-apq').textContent = (data.categories?.['APQ / Quota'] || 0);
-    document.getElementById('stat-temp').textContent = (data.categories?.['Temporary Order'] || 0);
+    document.getElementById('stat-proposed').textContent = (data.categories?.['Proposed Rule'] || 0);
+    document.getElementById('stat-temp').textContent = (data.categories?.['Temporary Order'] || 0) + (data.categories?.['APQ / Quota'] || 0);
 
     // Last updated
     if (data.last_sweep) {
@@ -208,19 +209,19 @@ async function load() {
     }
 
     // Category filters — high-signal types first
-    const PRIORITY = ['All', 'Final Rule', 'Temporary Order', 'APQ / Quota', 'Proposed Rule', 'Registration', 'Notice'];
+    const PRIORITY = ['High-signal', 'Final Rule', 'Proposed Rule', 'Temporary Order', 'APQ / Quota', 'All', 'Registration', 'General Notice'];
     const available = Object.keys(data.categories || {});
-    const ordered = PRIORITY.filter(c => c === 'All' || available.includes(c));
+    const ordered = PRIORITY.filter(c => c === 'All' || c === 'High-signal' || available.includes(c));
     const remainder = available.filter(c => !ordered.includes(c)).sort();
     const cats = [...ordered, ...remainder];
     const catRow = document.getElementById('cat-row');
     catRow.innerHTML = cats.map(c => {
-      const count = c === 'All' ? allDocs.length : (data.categories?.[c] || 0);
-      const isActive = c === 'All';
+      const count = c === 'All' ? allDocs.length : c === 'High-signal' ? data.high_signal_count : (data.categories?.[c] || 0);
+      const isActive = c === 'High-signal';
       return \`<button type="button" class="cat-pill \${isActive ? 'active' : 'inactive'}" data-cat="\${c}" aria-pressed="\${isActive}" onclick="setFilter('\${c}')">\${c} (\${count})</button>\`;
     }).join('');
 
-    renderDocs(allDocs);
+    renderDocs(allDocs.filter(d => d.signal_tier === 'high'));
   } catch (err) {
     document.getElementById('doc-list').innerHTML = \`<div class="no-results">Error loading data: \${err.message}<br><br>If this is a new deployment, run the sweep first: <code>/api/sweep</code></div>\`;
     document.getElementById('last-updated').textContent = 'Data unavailable';

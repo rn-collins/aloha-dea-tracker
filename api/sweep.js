@@ -6,116 +6,113 @@ const redis = new Redis({
 });
 
 const FR_BASE = 'https://www.federalregister.gov/api/v1/documents.json';
+const HIGH_SIGNAL = new Set(['Final Rule', 'Proposed Rule', 'Temporary Order', 'APQ / Quota']);
 
-// Keywords that flag scheduling relevance
-const SCHEDULING_TERMS = [
-  'schedule i', 'schedule ii', 'schedule iii', 'schedule iv',
-  'controlled substance', 'controlled substances',
-  'annual production quota', 'aggregate production quota', 'apq',
-  'temporary placement', 'temporary scheduling', 'temporary order',
-  'permanent placement', 'scheduling petition',
-  'psilocybin', 'psilocin', 'mdma', '3,4-methylenedioxy',
-  'ketamine', 'esketamine', 'cannabis', 'marijuana', 'thc',
-  'lsd', 'lysergic', 'dmt', 'dimethyltryptamine',
-  'ibogaine', 'mescaline', 'fentanyl', 'oxycodone',
-  'rems', 'ind ', 'nda ', '811(j)', '811(h)',
-  'bulk manufacturer', 'import quota', 'manufacturing quota',
-];
-
-function categorize(doc) {
-  const text = `${doc.title} ${doc.abstract || ''}`.toLowerCase();
-  if (text.includes('quota') || text.includes('annual production') || text.includes('aggregate production')) {
-    return 'APQ / Quota';
-  }
-  if (text.includes('temporary') && (text.includes('schedule') || text.includes('placement'))) {
-    return 'Temporary Order';
-  }
-  if (doc.type === 'Rule' && (text.includes('schedule') || text.includes('placement'))) {
-    return 'Final Rule';
-  }
-  if (doc.type === 'Proposed Rule') {
-    return 'Proposed Rule';
-  }
-  if (text.includes('manufacturer') || text.includes('importer') || text.includes('registration')) {
-    return 'Registration';
-  }
-  return 'Notice';
+function textFor(doc) {
+  return `${doc.title || ''} ${doc.abstract || ''}`.toLowerCase();
 }
 
-function isSchedulingRelevant(doc) {
-  const text = `${doc.title} ${doc.abstract || ''}`.toLowerCase();
-  return SCHEDULING_TERMS.some(term => text.includes(term));
+function isRegistration(text) {
+  return /\b(application|notice)\b.*\b(registration|registrant)\b|\b(bulk manufacturer|manufacturer of controlled substances|importer of controlled substances|exporter of controlled substances)\b|\bregistration\b.*\b(application|action)\b/.test(text);
+}
+
+function isQuota(text) {
+  return /\b(aggregate production quota|assessment of annual needs|annual production quota|manufacturing quota|import quota|quota adjustment|quota for)\b/.test(text);
+}
+
+function isTemporaryAction(text) {
+  return /\btemporary (placement|scheduling|order|extension)\b|\btemporarily (place|placing|schedule|scheduling)\b/.test(text);
+}
+
+function hasSchedulingAction(text) {
+  const subject = /\b(schedule (i|ii|iii|iv|v)|controlled substance|list i chemical|list ii chemical|drug code|scheduling action|placement in schedule|remove from schedule|reschedule|deschedule)\b/.test(text);
+  const action = /\b(place|placing|placement|schedule|scheduling|control|controlled|remove|removal|reschedule|deschedule|designation|amend|amendment|order)\b/.test(text);
+  return subject && action;
+}
+
+function classify(doc) {
+  const text = textFor(doc);
+  let category = 'General Notice';
+
+  // Strong title/abstract patterns take precedence over Federal Register document type.
+  if (isRegistration(text)) category = 'Registration';
+  else if (isQuota(text)) category = 'APQ / Quota';
+  else if (isTemporaryAction(text)) category = 'Temporary Order';
+  else if (doc.type === 'Rule' && hasSchedulingAction(text)) category = 'Final Rule';
+  else if (doc.type === 'Proposed Rule' && hasSchedulingAction(text)) category = 'Proposed Rule';
+
+  return {
+    category,
+    signal_tier: HIGH_SIGNAL.has(category) ? 'high' : 'reference',
+  };
 }
 
 async function fetchDEADocs() {
   const since = new Date();
   since.setDate(since.getDate() - 180);
-  const sinceStr = since.toISOString().split('T')[0];
-
   const params = new URLSearchParams();
   params.append('conditions[agencies][]', 'drug-enforcement-administration');
-  params.append('conditions[publication_date][gte]', sinceStr);
-  params.append('fields[]', 'title');
-  params.append('fields[]', 'document_number');
-  params.append('fields[]', 'publication_date');
-  params.append('fields[]', 'type');
-  params.append('fields[]', 'abstract');
-  params.append('fields[]', 'html_url');
-  params.append('fields[]', 'citation');
+  params.append('conditions[publication_date][gte]', since.toISOString().split('T')[0]);
+  for (const field of ['title', 'document_number', 'publication_date', 'type', 'abstract', 'html_url', 'citation']) {
+    params.append('fields[]', field);
+  }
   params.append('per_page', '80');
   params.append('order', 'newest');
 
-  const res = await fetch(`${FR_BASE}?${params}`);
-  if (!res.ok) throw new Error(`FR API error: ${res.status}`);
-  const data = await res.json();
+  const response = await fetch(`${FR_BASE}?${params}`);
+  if (!response.ok) throw new Error(`FR API error: ${response.status}`);
+  const data = await response.json();
   return data.results || [];
 }
 
 export default async function handler(req, res) {
   try {
     const allDocs = await fetchDEADocs();
-    
-    // Filter for scheduling-relevant documents
-    const relevant = allDocs
-      .filter(isSchedulingRelevant)
-      .map(doc => ({
+    const documents = allDocs.map(doc => {
+      const classification = classify(doc);
+      return {
         title: doc.title,
         document_number: doc.document_number,
         publication_date: doc.publication_date,
         type: doc.type,
-        category: categorize(doc),
+        ...classification,
         abstract: (doc.abstract || '').slice(0, 300),
         url: doc.html_url,
         citation: doc.citation,
-      }));
+      };
+    });
 
     const previousRaw = await redis.get('dea:documents');
     const previous = Array.isArray(previousRaw) ? previousRaw : (previousRaw ? JSON.parse(String(previousRaw)) : []);
-    const previousNums = new Set(previous.map(d => d.document_number));
-    const newDocs = relevant.filter(d => !previousNums.has(d.document_number));
+    const previousNums = new Set(previous.map(doc => doc.document_number));
+    const newHighSignal = documents.filter(doc => doc.signal_tier === 'high' && !previousNums.has(doc.document_number));
 
-    await redis.set('dea:documents', relevant);
-    await redis.set('dea:last_sweep', new Date().toISOString());
-    await redis.set('dea:total_found', allDocs.length);
+    await Promise.all([
+      redis.set('dea:documents', documents),
+      redis.set('dea:last_sweep', new Date().toISOString()),
+      redis.set('dea:total_found', allDocs.length),
+    ]);
 
-    // Slack alert on new scheduling-relevant docs
-    if (newDocs.length > 0 && process.env.SLACK_WEBHOOK_URL) {
-      const top = newDocs[0];
+    if (newHighSignal.length > 0 && process.env.SLACK_WEBHOOK_URL) {
+      const top = newHighSignal[0];
       await fetch(process.env.SLACK_WEBHOOK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text: `*DEA Scheduling Monitor* — ${newDocs.length} new document${newDocs.length > 1 ? 's' : ''}\n*${top.category}:* ${top.title}\n${top.citation} · ${top.publication_date}\n${top.url}`
+          text: `*DEA Scheduling Monitor* — ${newHighSignal.length} new high-signal action${newHighSignal.length > 1 ? 's' : ''}\n*${top.category}:* ${top.title}\n${top.citation} · ${top.publication_date}\n${top.url}`
         })
       });
     }
 
+    const highSignalCount = documents.filter(doc => doc.signal_tier === 'high').length;
     res.json({
       ok: true,
-      total_dea: allDocs.length,
-      scheduling_relevant: relevant.length,
-      new_this_sweep: newDocs.length,
-      documents: relevant,
+      total_documents: documents.length,
+      high_signal_count: highSignalCount,
+      reference_count: documents.length - highSignalCount,
+      scheduling_relevant: highSignalCount,
+      new_high_signal_this_sweep: newHighSignal.length,
+      documents,
     });
   } catch (err) {
     console.error(err);

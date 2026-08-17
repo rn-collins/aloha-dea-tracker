@@ -25,7 +25,7 @@ function isTemporaryAction(text) {
 }
 
 function hasSchedulingAction(text) {
-  const subject = /\b(schedule (i|ii|iii|iv|v)|controlled substance|list i chemical|list ii chemical|drug code|scheduling action|placement in schedule|remove from schedule|reschedule|deschedule)\b/.test(text);
+  const subject = /\b(schedule (i|ii|iii|iv|v)|controlled substance|list i chemicals?|list ii chemicals?|drug code|scheduling action|placement in schedule|remove from schedule|reschedule|deschedule)\b/.test(text);
   const action = /\b(place|placing|placement|schedule|scheduling|control|controlled|remove|removal|reschedule|deschedule|designation|amend|amendment|order)\b/.test(text);
   return subject && action;
 }

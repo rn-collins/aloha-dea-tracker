@@ -93,15 +93,21 @@ export default async function handler(req, res) {
       redis.set('dea:total_found', allDocs.length),
     ]);
 
-    if (newHighSignal.length > 0 && process.env.SLACK_WEBHOOK_URL) {
+    const webhook = process.env.SLACK_WEBHOOK_URL;
+    if (newHighSignal.length > 0 && /^https:\/\//.test(webhook || '')) {
       const top = newHighSignal[0];
-      await fetch(process.env.SLACK_WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: `*DEA Scheduling Monitor* — ${newHighSignal.length} new high-signal action${newHighSignal.length > 1 ? 's' : ''}\n*${top.category}:* ${top.title}\n${top.citation} · ${top.publication_date}\n${top.url}`
-        })
-      });
+      try {
+        const alertResponse = await fetch(webhook, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: `*DEA Scheduling Monitor* — ${newHighSignal.length} new high-signal action${newHighSignal.length > 1 ? 's' : ''}\n*${top.category}:* ${top.title}\n${top.citation} · ${top.publication_date}\n${top.url}`
+          })
+        });
+        if (!alertResponse.ok) console.warn(`Slack alert failed: ${alertResponse.status}`);
+      } catch (alertError) {
+        console.warn('Slack alert failed without interrupting the sweep:', alertError.message);
+      }
     }
 
     const highSignalCount = documents.filter(doc => doc.signal_tier === 'high').length;

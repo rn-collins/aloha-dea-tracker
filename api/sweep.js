@@ -56,18 +56,32 @@ async function fetchDEADocs() {
   for (const field of ['title', 'document_number', 'publication_date', 'type', 'abstract', 'html_url', 'citation']) {
     params.append('fields[]', field);
   }
-  params.append('per_page', '80');
+  params.append('per_page', '1000');
   params.append('order', 'newest');
 
-  const response = await fetch(`${FR_BASE}?${params}`);
+  const response = await fetch(`${FR_BASE}?${params}`, { signal: AbortSignal.timeout(15000) });
   if (!response.ok) throw new Error(`FR API error: ${response.status}`);
   const data = await response.json();
-  return data.results || [];
+  return { documents: data.results || [], total: Number(data.count) || (data.results || []).length };
+}
+
+function validSlackWebhook(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && ['hooks.slack.com', 'hooks.slack-gov.com'].includes(url.hostname);
+  } catch { return false; }
 }
 
 export default async function handler(req, res) {
+  if (!process.env.CRON_SECRET || req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  }
+
+  const attemptedAt = new Date().toISOString();
+  await redis.set('dea:last_attempt', attemptedAt);
   try {
-    const allDocs = await fetchDEADocs();
+    const fetched = await fetchDEADocs();
+    const allDocs = fetched.documents;
     const documents = allDocs.map(doc => {
       const classification = classify(doc);
       return {
@@ -89,12 +103,15 @@ export default async function handler(req, res) {
 
     await Promise.all([
       redis.set('dea:documents', documents),
-      redis.set('dea:last_sweep', new Date().toISOString()),
-      redis.set('dea:total_found', allDocs.length),
+      redis.set('dea:last_sweep', attemptedAt),
+      redis.set('dea:last_success', attemptedAt),
+      redis.set('dea:last_error', ''),
+      redis.set('dea:total_found', fetched.total),
+      redis.set('dea:source_health', { status:'healthy', checked_at:attemptedAt, last_success:attemptedAt, records_received:allDocs.length, total_available:fetched.total, error:null }),
     ]);
 
     const webhook = process.env.SLACK_WEBHOOK_URL;
-    if (newHighSignal.length > 0 && /^https:\/\//.test(webhook || '')) {
+    if (newHighSignal.length > 0 && validSlackWebhook(webhook)) {
       const top = newHighSignal[0];
       try {
         const alertResponse = await fetch(webhook, {
@@ -114,6 +131,7 @@ export default async function handler(req, res) {
     res.json({
       ok: true,
       total_documents: documents.length,
+      total_dea_docs_found: fetched.total,
       high_signal_count: highSignalCount,
       reference_count: documents.length - highSignalCount,
       scheduling_relevant: highSignalCount,
@@ -122,6 +140,9 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ ok: false, error: err.message });
+    const lastSuccess = await redis.get('dea:last_success');
+    const health = { status:'failed', checked_at:attemptedAt, last_success:lastSuccess || null, error:err.message };
+    await Promise.all([redis.set('dea:last_error',err.message),redis.set('dea:source_health',health)]);
+    res.status(503).json({ ok: false, error:'Federal Register refresh failed; the previous dataset was retained.', source_health:health });
   }
 }

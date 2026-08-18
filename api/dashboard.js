@@ -8,6 +8,7 @@ export default function handler(req, res) {
 <meta name="description" content="Real-time tracker of DEA Federal Register publications covering controlled substance scheduling actions, quota orders, temporary placements, and proposed rules.">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://aloha-dea-tracker.vercel.app/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://aloha-dea-tracker.vercel.app/">
 <meta property="og:title" content="DEA Scheduling Monitor — Aloha AI Consulting">
@@ -19,6 +20,8 @@ export default function handler(req, res) {
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Manrope', sans-serif; background: #F6F3EC; color: #1C1B1F; min-height: 100vh; }
+  .skip-link { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  .skip-link:focus { position: fixed; left: 12px; top: 12px; width: auto; height: auto; padding: 8px 12px; background: #1B7A68; color: white; z-index: 100; }
   .page { max-width: 900px; margin: 0 auto; padding: 52px 48px; }
 
   /* Header */
@@ -30,6 +33,9 @@ export default function handler(req, res) {
   .status-pill { display: flex; align-items: center; gap: 6px; background: white; border: .5px solid #D0CEC8; border-radius: 20px; padding: 6px 14px; font-family: 'DM Mono', monospace; font-size: 10px; color: #7A7875; white-space: nowrap; }
   .pulse { width: 7px; height: 7px; border-radius: 50%; background: #1B7A68; animation: pulse 2s ease-in-out infinite; }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+  .health-banner { display:flex; justify-content:space-between; gap:18px; align-items:center; background:white; border:1px solid #D0CEC8; border-left:5px solid #B8842A; border-radius:8px; padding:14px 16px; margin-bottom:18px; }
+  .health-banner.healthy { border-left-color:#1B7A68; } .health-banner.failed,.health-banner.stale { border-left-color:#C24A2E; }
+  .health-title { font-family:'Syne',sans-serif; font-size:11px; font-weight:700; } .health-detail { font-size:10px; color:#7A7875; margin-top:4px; line-height:1.5; } .health-state { font-family:'DM Mono',monospace; font-size:10px; text-transform:uppercase; white-space:nowrap; }
 
   /* Stats row */
   .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 32px; }
@@ -51,6 +57,7 @@ export default function handler(req, res) {
   .doc-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 40px; }
   .doc-card { background: white; border: .5px solid #D0CEC8; border-radius: 8px; padding: 16px 20px; display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; transition: box-shadow .15s, border-color .15s; text-decoration: none; color: inherit; }
   .doc-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,.06); border-color: #1B7A68; }
+  .doc-card:focus-visible,.cat-pill:focus-visible,.footer-contact a:focus-visible { outline:2px solid #1B7A68; outline-offset:2px; }
   .doc-type-badge { font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; white-space: nowrap; margin-top: 2px; }
   .badge-Rule { background: #D4EDE8; color: #1B7A68; }
   .badge-Proposed { background: #FDF3DC; color: #B8842A; }
@@ -71,10 +78,13 @@ export default function handler(req, res) {
   .footer-contact a { color: #1B7A68; text-decoration: none; }
   .loading { text-align: center; padding: 60px; color: #9A9890; font-family: 'DM Mono', monospace; font-size: 12px; }
 
+  @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration:.01ms!important; animation-iteration-count:1!important; scroll-behavior:auto!important; } }
+  @media print { body{background:#fff}.page{max-width:none;padding:20px}.pulse{animation:none}.cat-row{display:none}.doc-card{break-inside:avoid;box-shadow:none}.site-footer{break-inside:avoid}a{color:#000} }
   @media (max-width: 640px) { .page { padding: 28px 16px; } .stats-row { grid-template-columns: 1fr 1fr; } .site-header { flex-direction: column; gap: 16px; } .site-footer { flex-direction: column; gap: 16px; } .footer-contact { text-align: left; } }
 </style>
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
 <div class="page">
   <header class="site-header">
     <div>
@@ -85,7 +95,11 @@ export default function handler(req, res) {
     <div class="status-pill" role="status" aria-live="polite"><span class="pulse" aria-hidden="true"></span><span id="last-updated">Loading...</span></div>
   </header>
 
-  <main>
+  <main id="main-content">
+    <section class="health-banner" id="source-health" role="status" aria-live="polite">
+      <div><div class="health-title">Source health is loading</div><div class="health-detail">Checking the Federal Register refresh cadence.</div></div>
+      <div class="health-state" id="health-state">Checking</div>
+    </section>
     <div class="stats-row" role="region" aria-label="Summary statistics">
       <div class="stat-card">
         <div class="stat-label">High-signal Actions</div>
@@ -153,6 +167,17 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function escHtml(value) {
+  const node = document.createElement('div');
+  node.textContent = value == null ? '' : String(value);
+  return node.innerHTML;
+}
+
+function safeUrl(value) {
+  try { const url = new URL(value); return url.protocol === 'https:' && (url.hostname === 'federalregister.gov' || url.hostname.endsWith('.federalregister.gov')) ? url.href : '#'; }
+  catch { return '#'; }
+}
+
 function renderDocs(docs) {
   const list = document.getElementById('doc-list');
   const label = document.getElementById('doc-section-label');
@@ -163,12 +188,12 @@ function renderDocs(docs) {
   }
   label.textContent = activeFilter === 'All' ? 'All DEA Documents (' + docs.length + ')' : activeFilter + ' (' + docs.length + ')';
   list.innerHTML = docs.map(doc => \`
-    <a class="doc-card" href="\${doc.url}" target="_blank" rel="noopener" role="listitem" aria-label="\${doc.category}: \${doc.title}">
-      <div class="doc-type-badge \${badgeClass(doc.category)}" aria-hidden="true">\${doc.category}</div>
+    <a class="doc-card" href="\${safeUrl(doc.url)}" target="_blank" rel="noopener noreferrer" role="listitem" aria-label="\${escHtml(doc.category)}: \${escHtml(doc.title)}">
+      <div class="doc-type-badge \${badgeClass(doc.category)}" aria-hidden="true">\${escHtml(doc.category)}</div>
       <div>
-        <div class="doc-title-text">\${doc.title}</div>
-        <div class="doc-meta">\${doc.citation} &nbsp;&middot;&nbsp; \${formatDate(doc.publication_date)}</div>
-        \${doc.abstract ? \`<div class="doc-abstract">\${doc.abstract}\${doc.abstract.length >= 300 ? '&hellip;' : ''}</div>\` : ''}
+        <div class="doc-title-text">\${escHtml(doc.title)}</div>
+        <div class="doc-meta">\${escHtml(doc.citation)} &nbsp;&middot;&nbsp; \${formatDate(doc.publication_date)}</div>
+        \${doc.abstract ? \`<div class="doc-abstract">\${escHtml(doc.abstract)}\${doc.abstract.length >= 300 ? '&hellip;' : ''}</div>\` : ''}
       </div>
     </a>
   \`).join('');
@@ -193,6 +218,14 @@ async function load() {
     if (!data.ok) throw new Error(data.error);
 
     allDocs = data.documents || [];
+    const health=data.source_health||{};
+    const state=health.stale?'stale':(health.status||'unknown');
+    const box=document.getElementById('source-health');
+    box.classList.add(state);
+    document.getElementById('health-state').textContent=state;
+    box.querySelector('.health-title').textContent=state==='healthy'?'Federal Register source healthy':state==='stale'?'Data may be stale':state==='failed'?'Source refresh failed':'Source health unavailable';
+    const success=health.last_success?new Date(health.last_success):null;
+    box.querySelector('.health-detail').textContent=(success?'Last successful sweep '+success.toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'})+'. ':'No successful sweep recorded. ')+(health.cadence||'Weekly cadence.')+(health.error?' The previous dataset is still shown.':'');
 
     // Stats
     document.getElementById('stat-relevant').textContent = data.high_signal_count;
@@ -223,7 +256,8 @@ async function load() {
 
     renderDocs(allDocs.filter(d => d.signal_tier === 'high'));
   } catch (err) {
-    document.getElementById('doc-list').innerHTML = \`<div class="no-results">Error loading data: \${err.message}<br><br>If this is a new deployment, run the sweep first: <code>/api/sweep</code></div>\`;
+    document.getElementById('doc-list').innerHTML = '<div class="no-results">Unable to load the DEA source register. Please try again later.</div>';
+    const box=document.getElementById('source-health'); box.classList.add('failed'); box.querySelector('.health-title').textContent='Data endpoint unavailable'; box.querySelector('.health-detail').textContent='The tracker could not verify Federal Register freshness.'; document.getElementById('health-state').textContent='Failed';
     document.getElementById('last-updated').textContent = 'Data unavailable';
   }
 }

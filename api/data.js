@@ -14,11 +14,18 @@ function parseRedis(value) {
 }
 
 export default async function handler(req, res) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.setHeader('Allow','GET, HEAD');
+    return res.status(405).json({ok:false,error:'Method not allowed'});
+  }
   try {
-    const [docsRaw, lastSweep, totalFound] = await Promise.all([
+    const [docsRaw, lastSweep, totalFound, healthRaw, lastAttempt, lastError] = await Promise.all([
       redis.get('dea:documents'),
       redis.get('dea:last_sweep'),
       redis.get('dea:total_found'),
+      redis.get('dea:source_health'),
+      redis.get('dea:last_attempt'),
+      redis.get('dea:last_error'),
     ]);
 
     const docs = parseRedis(docsRaw) || [];
@@ -31,10 +38,28 @@ export default async function handler(req, res) {
       signalTiers[tier] += 1;
     }
 
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    const health = parseRedis(healthRaw) || {};
+    const successTime = health.last_success || lastSweep || null;
+    const ageMs = successTime ? Date.now() - new Date(successTime).getTime() : null;
+    const stale = !Number.isFinite(ageMs) || ageMs > 8 * 24 * 60 * 60 * 1000;
+    const sourceHealth = {
+      status: stale ? 'stale' : (health.status || (lastError ? 'failed' : successTime ? 'healthy' : 'unknown')),
+      checked_at: health.checked_at || lastAttempt || null,
+      last_success: successTime,
+      age_hours: Number.isFinite(ageMs) ? Math.round(ageMs / 360000) / 10 : null,
+      stale,
+      cadence:'Weekly · Mondays 09:00 UTC',
+      records_received:health.records_received ?? docs.length,
+      total_available:health.total_available ?? (Number(totalFound) || docs.length),
+      error:health.error || lastError || null,
+    };
+    res.setHeader('Cache-Control','public, max-age=60, stale-while-revalidate=300');
+    res.setHeader('Access-Control-Allow-Origin', 'https://aloha-dea-tracker.vercel.app');
     res.json({
       ok: true,
       last_sweep: lastSweep,
+      source_health: sourceHealth,
+      data_freshness: stale ? 'stale' : 'current',
       total_dea_docs_found: Number(totalFound) || docs.length,
       total_documents: docs.length,
       high_signal_count: signalTiers.high,
@@ -47,6 +72,6 @@ export default async function handler(req, res) {
       documents: docs,
     });
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(500).json({ ok: false, error:'Unable to load the DEA source register.', source_health:{status:'failed',stale:true,last_success:null} });
   }
 }

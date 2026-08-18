@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Sitemap: https://aloha-dea-tracker.vercel.app/sitemap.xml

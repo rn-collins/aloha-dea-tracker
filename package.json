@@ -2,9 +2,12 @@
   "name": "aloha-dea-tracker",
   "version": "1.0.0",
   "type": "module",
-  "engines": { "node": ">=20 <25" },
+  "engines": {
+    "node": ">=20 <25"
+  },
   "scripts": {
-    "build": "echo 'no build needed'"
+    "build": "echo 'no build needed'",
+    "test": "node --test"
   },
   "dependencies": {
     "@upstash/redis": "1.38.2"

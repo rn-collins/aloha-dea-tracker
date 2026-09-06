@@ -114,6 +114,7 @@ export function renderPage(reg) {
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://aloha-dea-tracker.vercel.app/">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://aloha-dea-tracker.vercel.app/">
 <meta property="og:title" content="DEA Scheduling Monitor — Aloha AI Consulting">

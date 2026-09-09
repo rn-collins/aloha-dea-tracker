@@ -259,7 +259,7 @@ export function renderPage(reg) {
     <div class="footer-contact">
       <a href="mailto:collins.ra@northeastern.edu?subject=Regulatory%20Intelligence%20Layer%20%E2%80%94%20Discovery%20Call%20Request">collins.ra@northeastern.edu</a><br>
       <a href="tel:+18606814438">860-681-4438</a><br>
-      <a href="https://rncollins.com/aloha-ai-consulting" target="_blank" rel="noopener">rncollins.com/aloha-ai-consulting</a>
+      <a href="https://aloha-ai-consulting.vercel.app" target="_blank" rel="noopener">aloha-ai-consulting.vercel.app</a>
     </div>
   </footer>
 </div>
